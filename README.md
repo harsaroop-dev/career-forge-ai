@@ -1,6 +1,6 @@
 # CareerForge AI 🚀
 
-An AI-powered career dashboard that analyzes Resumes against Job Descriptions using RAG and Llama 3.3.
+An AI-powered career dashboard that analyzes Resumes against Job Descriptions.
 
 ## Tech Stack
 
