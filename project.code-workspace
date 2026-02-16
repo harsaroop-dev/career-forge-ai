@@ -1,0 +1,15 @@
+{
+  "folders": [
+    {
+      "name": "Frontend (Next.js)",
+      "path": "frontend"
+    },
+    {
+      "name": "Backend (FastAPI)",
+      "path": "backend"
+    }
+  ],
+  "settings": {
+    "typescript.tsdk": "Frontend (Next.js)\\node_modules\\typescript\\lib"
+  }
+}

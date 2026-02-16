@@ -9,6 +9,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
 from langchain_core.documents import Document
 from fastapi.middleware.cors import CORSMiddleware
+import traceback
+from fastapi import UploadFile, File
+from pypdf import PdfReader
+import io
 
 
 load_dotenv()
@@ -51,24 +55,101 @@ class JDRequest(BaseModel):
 @app.post("/analyze")
 async def analyze_jd(data: JDRequest):
     try:
+        print(f"Received request for JD: {data.job_description[:50]}...")
+
         relevant_docs = vector_store.similarity_search(
             data.job_description, k=6)
+        print(f"Found {len(relevant_docs)} relevant document chunks.")
+
         resume_context = "\n".join([doc.page_content for doc in relevant_docs])
 
         prompt = f"""
-        SYSTEM: You are a Senior Technical Architect. Return ONLY a JSON object.
-        TASK: Analyze RESUME CONTEXT against JOB DESCRIPTION.
-        
-        RESUME: {resume_context}
-        JD: {data.job_description}
-        
-        FORMAT: 
+SYSTEM: You are an expert Technical Recruiter.
+TASK: Compare the provided RESUME CONTEXT against the JOB DESCRIPTION.
+
+SCALING RULE: 
+- Provide a match_score as an INTEGER between 0 and 100.
+- 0 means no match; 100 means a perfect candidate.
+- If the candidate has the primary tech stack, the score should generally be above 70.
+
+RESUME CONTEXT:
+{resume_context}
+
+JOB DESCRIPTION:
+{data.job_description}
+
+Return ONLY a JSON object in this format:
+{{
+    "match_score": int,
+    "technical_gaps": ["skill1", "skill2"],
+    "professional_assessment": "Short paragraph summary",
+    "strategic_project_idea": "One specific project to bridge gaps",
+    "key_strength": "Primary reason for hire"
+}}
+"""
+
+        print("Sending to Groq...")
+        completion = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={"type": "json_object"}
+        )
+        return json.loads(completion.choices[0].message.content)
+
+    except Exception as e:
+        print("ERROR DETECTED:")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/upload-resume")
+async def upload_resume(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        pdf_reader = PdfReader(io.BytesIO(content))
+
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text()
+
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=100)
+        chunks = text_splitter.split_text(text)
+
+        supabase.table("documents").delete().neq("content", "").execute()
+
+        vector_store.add_texts(chunks)
+
+        return {"message": f"Successfully processed {len(chunks)} chunks from {file.filename}"}
+
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RoadmapRequest(BaseModel):
+    project_idea: str
+    technical_gaps: list
+
+
+@app.post("/generate-roadmap")
+async def generate_roadmap(data: RoadmapRequest):
+    try:
+        prompt = f"""
+        SYSTEM: You are a Senior Technical Architect. 
+        TASK: Create a 3-phase implementation roadmap for the following project idea.
+        PROJECT: {data.project_idea}
+        GAPS TO BRIDGE: {", ".join(data.technical_gaps)}
+
+        Return ONLY a JSON object in this format:
         {{
-            "match_score": int,
-            "technical_gaps": [],
-            "professional_assessment": "",
-            "strategic_project_idea": "",
-            "key_strength": ""
+            "phases": [
+                {{ "title": "Phase 1: Setup & MVP", "task": "Specific task using a gap skill" }},
+                {{ "title": "Phase 2: Core Logic", "task": "How to implement the main feature" }},
+                {{ "title": "Phase 3: Optimization", "task": "Advanced refinement" }}
+            ]
         }}
         """
 
@@ -77,9 +158,14 @@ async def analyze_jd(data: JDRequest):
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
+
         return json.loads(completion.choices[0].message.content)
+
     except Exception as e:
+        print("ROADMAP ERROR:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

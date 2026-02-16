@@ -1,14 +1,31 @@
-# Python
+# --- Frontend (Next.js) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env*
+frontend/.vercel
+frontend/npm-debug.log*
+frontend/yarn-error.log*
+
+# --- Backend (Python/FastAPI) ---
 backend/venv/
 backend/__pycache__/
 backend/.env
-backend/resume.pdf
-*.pyc
+backend/*.pdf
+backend/*.pyc
+backend/.pytest_cache/
 
-# IDEs
+# --- Environment & Secret Files ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- IDEs and OS ---
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
+*.swp
